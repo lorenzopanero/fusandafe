@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "944630789596",
+    "project_id": "fusandafe-ac9ee",
+    "storage_bucket": "fusandafe-ac9ee.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:944630789596:android:feb4cce6bf33da0f6acb19",
+        "android_client_info": {
+          "package_name": "com.example.fusandafe"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC3Avx0q5aKcO3zxP_II4EXR1Ulf4TV8f0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
