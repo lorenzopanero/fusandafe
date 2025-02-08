@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
 
 class EventiScreen extends StatelessWidget {
   
@@ -107,20 +111,28 @@ class AddEventScreen extends StatefulWidget {
 class _AddEventScreenState extends State<AddEventScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
+  final _placeController = TextEditingController();
   DateTime? _selectedDate;
+  File? _eventImage;
+  String? _eventImageUrl;
 
   Future<void> _addEvent() async {
-    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty || _selectedDate == null) {
+    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty || _selectedDate == null || _placeController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Please fill out all fields.')),
+        SnackBar(content: Text('Per favore, riempi tutti i campi.')),
       );
       return;
     }
+
+    // Upload image to storage and get URL (not implemented here)
+    // String imageUrl = await uploadImage(_selectedImage);
 
     await FirebaseFirestore.instance.collection('events').add({
       'title': _titleController.text,
       'description': _descriptionController.text,
       'date': Timestamp.fromDate(_selectedDate!),
+      'place': _placeController.text,
+      // 'image': imageUrl,
     });
 
     Navigator.pop(context);
@@ -140,44 +152,107 @@ class _AddEventScreenState extends State<AddEventScreen> {
     }
   }
 
+  Future<void> _pickAndUploadImage() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+
+    if (pickedFile != null) {
+      setState(() {
+        _eventImage = File(pickedFile.path);
+      });
+
+      try {
+        final storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_images')
+            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
+
+        await storageRef.putFile(_eventImage!);
+        _eventImageUrl = await storageRef.getDownloadURL();
+      } catch (e) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to upload image: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final imageSize = MediaQuery.of(context).size.width * 0.6;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text('Add Event'),
+        title: Text('Aggiungi Evento'),
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
+            GestureDetector(
+              onTap: _pickAndUploadImage,
+              child: Container(
+                width: imageSize,
+                height: imageSize,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey),
+                  image: _eventImage != null
+                      ? DecorationImage(
+                          image: FileImage(_eventImage!),
+                          fit: BoxFit.cover,
+                        )
+                      : (_eventImageUrl != null
+                          ? DecorationImage(
+                              image: NetworkImage(_eventImageUrl!),
+                              fit: BoxFit.cover,
+                            )
+                          : DecorationImage(
+                              image: AssetImage('assets/default_event_thumbnail.png'),
+                              fit: BoxFit.cover,
+                            )),
+                ),
+                child: _eventImage == null && _eventImageUrl == null
+                    ? Center(child: Icon(Icons.camera_alt, color: Colors.white))
+                    : null,
+              ),
+            ),
+            SizedBox(height: 20),
             TextField(
               controller: _titleController,
-              decoration: InputDecoration(labelText: 'Title'),
+              decoration: InputDecoration(labelText: 'Titolo'),
             ),
             TextField(
               controller: _descriptionController,
-              decoration: InputDecoration(labelText: 'Description'),
+              decoration: InputDecoration(labelText: 'Descrizione'),
               maxLines: 3,
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(500),
+              ],
+            ),
+            TextField(
+              controller: _placeController,
+              decoration: InputDecoration(labelText: 'Luogo'),
             ),
             SizedBox(height: 20),
             Row(
               children: [
                 Text(
                   _selectedDate == null
-                      ? 'No date chosen!'
-                      : 'Picked Date: ${DateFormat.yMd().format(_selectedDate!)}',
+                      ? 'Nessuna data selezionata'
+                      : 'Data scelta: ${DateFormat.yMd().format(_selectedDate!)}',
                 ),
                 Spacer(),
                 TextButton(
                   onPressed: () => _selectDate(context),
-                  child: Text('Choose Date'),
+                  child: Text('Scegli data'),
                 ),
               ],
             ),
             Spacer(),
             ElevatedButton(
               onPressed: _addEvent,
-              child: Text('Add Event'),
+              child: Text('Invia Evento'),
             ),
           ],
         ),
