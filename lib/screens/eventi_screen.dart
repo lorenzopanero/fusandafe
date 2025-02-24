@@ -1,103 +1,260 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:table_calendar/table_calendar.dart';
 
-class EventiScreen extends StatelessWidget {
-  
+class EventiScreen extends StatefulWidget {
+  @override
+  _EventiScreenState createState() => _EventiScreenState();
+}
+
+class _EventiScreenState extends State<EventiScreen> {
+  bool _showCalendar = false;
+  CalendarFormat _calendarFormat = CalendarFormat.month;
+  DateTime _focusedDay = DateTime.now();
+  DateTime? _selectedDay;
+  Map<DateTime, List<DocumentSnapshot>> _events = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadEvents();
+  }
+
+  void _loadEvents() {
+    FirebaseFirestore.instance.collection('events').orderBy('date').snapshots().listen((snapshot) {
+      setState(() {
+        _events = {};
+        for (var event in snapshot.docs) {
+          DateTime date = event['date'].toDate();
+          if (_events[date] == null) {
+            _events[date] = [];
+          }
+          _events[date]!.add(event);
+        }
+      });
+    });
+  }
+
+  List<DocumentSnapshot> _getEventsForDay(DateTime day) {
+    return _events[day] ?? [];
+  }
+
+  Color _getEventColor(int eventCount) {
+    if (eventCount == 1) {
+      return Colors.green;
+    } else if (eventCount == 2) {
+      return Colors.orange;
+    } else {
+      return Colors.red;
+    }
+  }
+
   Widget _buildEventCard(DocumentSnapshot event) {
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      elevation: 8.0, // Increase the elevation for more shadow
+      color: Color.fromARGB(255, 224, 203, 255), // Very light tone of the same palette as #5E17EB
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              event['title'],
-              style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  event['title'],
+                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: Icon(Icons.favorite_border),
+                  onPressed: () {
+                    // Handle save to favorites action
+                  },
+                ),
+              ],
             ),
-            SizedBox(height: 8.0),
             Text(
               event['description'],
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
-            Align(
-              alignment: Alignment.centerRight,
-              child: IconButton(
-                icon: Icon(Icons.favorite_border),
-                onPressed: () {
-                  // Handle save to favorites action
-                },
-              ),
+            SizedBox(height: 8.0),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    event['place'],
+                    style: TextStyle(fontSize: 16.0),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final url = Uri.parse(event['link']);
+                    print('Attempting to launch URL: $url');
+                    if (await canLaunchUrl(url)) {
+                      await launchUrl(url);
+                    } else {
+                      print('Could not launch $url');
+                      throw 'Could not launch $url';
+                    }
+                  },
+                  child: Text(event['linkLabel']),
+                ),
+              ],
             ),
           ],
         ),
       ),
     );
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Eventi'),
         actions: [
-          IconButton(
-            icon: Icon(Icons.add),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => AddEventScreen()),
-              );
-            },
+          Padding(
+            padding: const EdgeInsets.all(5.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Color(0xFF5E17EB),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(Icons.add, color: Colors.white),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddEventScreen()),
+                  );
+                },
+              ),
+            ),
           ),
         ],
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('events').orderBy('date').snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return Center(child: CircularProgressIndicator());
+      body: _showCalendar ? _buildCalendarView() : _buildListView(),
+      bottomNavigationBar: BottomAppBar(
+        child: TextButton(
+          onPressed: () {
+            setState(() {
+              _showCalendar = !_showCalendar;
+            });
+          },
+          child: Text(_showCalendar ? 'Visualizza Lista' : 'Visualizza Calendario'),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildListView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('events').orderBy('date').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return Center(child: CircularProgressIndicator());
+        }
+
+        List<DocumentSnapshot> events = snapshot.data!.docs;
+        Map<String, List<DocumentSnapshot>> groupedEvents = {};
+
+        for (var event in events) {
+          String date = DateFormat('dd/MM/yyyy').format(event['date'].toDate());
+          if (groupedEvents[date] == null) {
+            groupedEvents[date] = [];
           }
+          groupedEvents[date]!.add(event);
+        }
 
-          List<DocumentSnapshot> events = snapshot.data!.docs;
-          Map<String, List<DocumentSnapshot>> groupedEvents = {};
-
-          for (var event in events) {
-            String date = DateFormat('dd/MM/yyyy').format(event['date'].toDate());
-            if (groupedEvents[date] == null) {
-              groupedEvents[date] = [];
-            }
-            groupedEvents[date]!.add(event);
-          }
-
-          List<Widget> eventWidgets = [];
-          groupedEvents.forEach((date, events) {
-            eventWidgets.add(
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8.0),
-                child: Center(
-                  child: Text(
-                    date,
-                    style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-                  ),
+        List<Widget> eventWidgets = [];
+        groupedEvents.forEach((date, events) {
+          eventWidgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Center(
+                child: Text(
+                  date,
+                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
                 ),
               ),
-            );
-            events.forEach((event) {
-              eventWidgets.add(_buildEventCard(event));
-            });
-          });
-
-          return ListView(
-            children: eventWidgets,
+            ),
           );
+          events.forEach((event) {
+            eventWidgets.add(_buildEventCard(event));
+          });
+        });
+
+        return ListView(
+          children: eventWidgets,
+        );
+      },
+    );
+  }
+
+  Widget _buildCalendarView() {
+    return TableCalendar(
+      firstDay: DateTime.utc(2000, 1, 1),
+      lastDay: DateTime.utc(2100, 12, 31),
+      focusedDay: _focusedDay,
+      calendarFormat: _calendarFormat,
+      selectedDayPredicate: (day) {
+        return isSameDay(_selectedDay, day);
+      },
+      onDaySelected: (selectedDay, focusedDay) {
+        setState(() {
+          _selectedDay = selectedDay;
+          _focusedDay = focusedDay; // update `_focusedDay` here as well
+        });
+      },
+      onFormatChanged: (format) {
+        if (_calendarFormat != format) {
+          setState(() {
+            _calendarFormat = format;
+          });
+        }
+      },
+      onPageChanged: (focusedDay) {
+        _focusedDay = focusedDay;
+      },
+      eventLoader: _getEventsForDay,
+      calendarBuilders: CalendarBuilders(
+        markerBuilder: (context, date, events) {
+          if (events.isNotEmpty) {
+            return Positioned(
+              right: 1,
+              bottom: 1,
+              child: _buildEventMarker(events.length),
+            );
+          }
+          return null;
         },
+      ),
+    );
+  }
+
+  Widget _buildEventMarker(int eventCount) {
+    return Container(
+      width: 16.0,
+      height: 16.0,
+      decoration: BoxDecoration(
+        color: _getEventColor(eventCount),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          '$eventCount',
+          style: TextStyle().copyWith(
+            color: Colors.white,
+            fontSize: 12.0,
+          ),
+        ),
       ),
     );
   }
@@ -112,27 +269,25 @@ class _AddEventScreenState extends State<AddEventScreen> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
   final _placeController = TextEditingController();
+  final _linkController = TextEditingController();
+  final _linkLabelController = TextEditingController();
   DateTime? _selectedDate;
-  File? _eventImage;
-  String? _eventImageUrl;
 
   Future<void> _addEvent() async {
-    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty || _selectedDate == null || _placeController.text.isEmpty) {
+    if (_titleController.text.isEmpty || _descriptionController.text.isEmpty || _selectedDate == null || _placeController.text.isEmpty || _linkController.text.isEmpty || _linkLabelController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Per favore, riempi tutti i campi.')),
       );
       return;
     }
 
-    // Upload image to storage and get URL (not implemented here)
-    // String imageUrl = await uploadImage(_selectedImage);
-
     await FirebaseFirestore.instance.collection('events').add({
       'title': _titleController.text,
       'description': _descriptionController.text,
       'date': Timestamp.fromDate(_selectedDate!),
       'place': _placeController.text,
-      // 'image': imageUrl,
+      'link': _linkController.text,
+      'linkLabel': _linkLabelController.text,
     });
 
     Navigator.pop(context);
@@ -152,35 +307,38 @@ class _AddEventScreenState extends State<AddEventScreen> {
     }
   }
 
-  Future<void> _pickAndUploadImage() async {
-    final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
-
-    if (pickedFile != null) {
-      setState(() {
-        _eventImage = File(pickedFile.path);
-      });
-
-      try {
-        final storageRef = FirebaseStorage.instance
-            .ref()
-            .child('profile_images')
-            .child('${DateTime.now().millisecondsSinceEpoch}.jpg');
-
-        await storageRef.putFile(_eventImage!);
-        _eventImageUrl = await storageRef.getDownloadURL();
-      } catch (e) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to upload image: $e')),
-        );
-      }
-    }
+  Widget _buildTextFormField({
+    required TextEditingController controller,
+    required String labelText,
+    bool obscureText = false,
+    void Function(String)? onChanged,
+    int maxLines = 1,
+    List<TextInputFormatter>? inputFormatters,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: labelText,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(25.0),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(25.0),
+          borderSide: BorderSide(color: const Color(0xFF5E17EB)),
+        ),
+        labelStyle: TextStyle(color: Colors.grey[600]),
+        contentPadding: EdgeInsets.symmetric(horizontal: 20.0),
+      ),
+      obscureText: obscureText,
+      maxLines: maxLines,
+      onChanged: onChanged,
+      inputFormatters: inputFormatters,
+    );
   }
+
 
   @override
   Widget build(BuildContext context) {
-    final imageSize = MediaQuery.of(context).size.width * 0.6;
-
     return Scaffold(
       appBar: AppBar(
         title: Text('Aggiungi Evento'),
@@ -189,50 +347,39 @@ class _AddEventScreenState extends State<AddEventScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            GestureDetector(
-              onTap: _pickAndUploadImage,
-              child: Container(
-                width: imageSize,
-                height: imageSize,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey),
-                  image: _eventImage != null
-                      ? DecorationImage(
-                          image: FileImage(_eventImage!),
-                          fit: BoxFit.cover,
-                        )
-                      : (_eventImageUrl != null
-                          ? DecorationImage(
-                              image: NetworkImage(_eventImageUrl!),
-                              fit: BoxFit.cover,
-                            )
-                          : DecorationImage(
-                              image: AssetImage('assets/default_event_thumbnail.png'),
-                              fit: BoxFit.cover,
-                            )),
-                ),
-                child: _eventImage == null && _eventImageUrl == null
-                    ? Center(child: Icon(Icons.camera_alt, color: Colors.white))
-                    : null,
-              ),
+            _buildTextFormField(
+              controller: _titleController,
+              labelText: 'Titolo',
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(35),
+              ],
             ),
             SizedBox(height: 20),
-            TextField(
-              controller: _titleController,
-              decoration: InputDecoration(labelText: 'Titolo'),
-            ),
-            TextField(
+            _buildTextFormField(
               controller: _descriptionController,
-              decoration: InputDecoration(labelText: 'Descrizione'),
+              labelText: 'Descrizione',
               maxLines: 3,
               inputFormatters: [
                 LengthLimitingTextInputFormatter(500),
               ],
             ),
-            TextField(
+            SizedBox(height: 20),
+            _buildTextFormField(
               controller: _placeController,
-              decoration: InputDecoration(labelText: 'Luogo'),
+              labelText: 'Luogo',
+            ),
+            SizedBox(height: 20),
+            _buildTextFormField(
+              controller: _linkController,
+              labelText: 'Link (es. locandina, iscrizione...)',
+            ),
+            SizedBox(height: 20),
+            _buildTextFormField(
+              controller: _linkLabelController,
+              labelText: 'Etichetta del Link',
+              inputFormatters: [
+                LengthLimitingTextInputFormatter(20),
+              ],
             ),
             SizedBox(height: 20),
             Row(
