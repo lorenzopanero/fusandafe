@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:table_calendar/table_calendar.dart';
+import 'dart:collection';
 
 class EventiScreen extends StatefulWidget {
   @override
@@ -11,24 +13,41 @@ class EventiScreen extends StatefulWidget {
 }
 
 class _EventiScreenState extends State<EventiScreen> {
+  final userId = FirebaseAuth.instance.currentUser?.uid; // Get the current user's ID
   bool _showCalendar = false;
+  bool _showFavorites = false; // Determines if only favorite events should be displayed
   CalendarFormat _calendarFormat = CalendarFormat.month;
   DateTime _focusedDay = DateTime.now();
   DateTime? _selectedDay;
-  Map<DateTime, List<DocumentSnapshot>> _events = {};
+  late final LinkedHashMap<DateTime, List<DocumentSnapshot>> _events;
+  List<DocumentSnapshot> _selectedEvents = [];
+  final ScrollController _scrollController = ScrollController();
+  bool _hasScrolledToToday = false;
 
   @override
   void initState() {
     super.initState();
+    _events = LinkedHashMap(
+      equals: isSameDay,
+      hashCode: (key) => key.hashCode,
+    );
     _loadEvents();
   }
 
   void _loadEvents() {
-    FirebaseFirestore.instance.collection('events').orderBy('date').snapshots().listen((snapshot) {
+    FirebaseFirestore.instance
+        .collection('events')
+        .orderBy('date')
+        .snapshots()
+        .listen((snapshot) {
+      if (!mounted) return;
       setState(() {
-        _events = {};
+        _events.clear(); // Ensure the map is reset before adding new data
+
         for (var event in snapshot.docs) {
-          DateTime date = event['date'].toDate();
+          DateTime fullDate = event['date'].toDate();
+          DateTime date = DateTime(fullDate.year, fullDate.month, fullDate.day); // Normalize
+
           if (_events[date] == null) {
             _events[date] = [];
           }
@@ -38,9 +57,168 @@ class _EventiScreenState extends State<EventiScreen> {
     });
   }
 
-  List<DocumentSnapshot> _getEventsForDay(DateTime day) {
-    return _events[day] ?? [];
+  // List view
+
+  Widget _buildListView() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('events').orderBy('date').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        List<DocumentSnapshot> events = snapshot.data!.docs;
+
+        // Filter only favorited events if _showFavorites is active
+        if (_showFavorites) {
+          events = events.where((event) {
+            if (event.data() == null || !(event.data() as Map<String, dynamic>).containsKey('favorites')) {
+              return false; // Skip events without a "favorites" field
+            }
+
+            List<dynamic>? favorites = (event['favorites'] as List<dynamic>?);
+            return favorites != null && favorites.contains(userId);
+          }).toList();
+        }
+
+        Map<String, List<DocumentSnapshot>> groupedEvents = {};
+        String todayDate = DateFormat('dd/MM/yyyy').format(DateTime.now());
+        int todayIndex = 0;
+        int indexCounter = 0;
+
+        for (var event in events) {
+          String date = DateFormat('dd/MM/yyyy').format(event['date'].toDate());
+          groupedEvents.putIfAbsent(date, () => []).add(event);
+        }
+
+        List<Widget> eventWidgets = [];
+        groupedEvents.forEach((date, events) {
+          if (date == todayDate) {
+            todayIndex = indexCounter; // Save the index of today’s section
+          }
+
+          eventWidgets.add(
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
+              child: Center(
+                child: Text(
+                  date,
+                  style: const TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+          );
+
+          for (var event in events) {
+            eventWidgets.add(_buildEventCard(event));
+            indexCounter++;
+          }
+        });
+
+        // Scroll to today's section once the UI is built
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_hasScrolledToToday) {
+            _scrollController.animateTo(
+              todayIndex * 200.0, // Adjust based on item height
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+            );
+            _hasScrolledToToday = true;
+          }
+        });
+
+        return ListView(
+          controller: _scrollController,
+          children: eventWidgets,
+        );
+      },
+    );
   }
+
+  Widget _buildEventCard(DocumentSnapshot event) {
+    List<dynamic> favorites = (event.data() as Map<String, dynamic>).containsKey('favorites') == true
+    ? event['favorites']
+    : [];
+    bool isFavorite = favorites.contains(userId); // Check if user already favorited
+
+    return Card(
+      margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
+      elevation: 8.0,
+      color: Color.fromARGB(255, 224, 203, 255),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  event['title'] ?? 'No Title',
+                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
+                ),
+                IconButton(
+                  icon: Icon(
+                    isFavorite ? Icons.favorite : Icons.favorite_border,
+                    color: isFavorite ? Colors.red : null,
+                  ),
+                  onPressed: () async {
+                    if (userId == null) return; // Ensure user is logged in
+
+                    List<dynamic> updatedFavorites = List.from(favorites);
+
+                    if (isFavorite) {
+                      updatedFavorites.remove(userId); // Remove from favorites
+                    } else {
+                      updatedFavorites.add(userId); // Add to favorites
+                    }
+
+                    await FirebaseFirestore.instance
+                        .collection('events')
+                        .doc(event.id)
+                        .update({'favorites': updatedFavorites});
+                  },
+                ),
+              ],
+            ),
+            Text(
+              event['description'] ?? 'No Description',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+            SizedBox(height: 8.0),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    event['place'] ?? 'Unknown Location',
+                    style: TextStyle(fontSize: 16.0),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    if (event['link'] != null) {
+                      final url = Uri.parse(event['link']);
+                      if (await canLaunchUrl(url)) {
+                        await launchUrl(url);
+                      } else {
+                        throw 'Could not launch $url';
+                      }
+                    }
+                  },
+                  child: Text(event['linkLabel'] ?? 'Open', style: TextStyle(color: Color(0xFF5E17EB))),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Calendar view
 
   Color _getEventColor(int eventCount) {
     if (eventCount == 1) {
@@ -52,190 +230,51 @@ class _EventiScreenState extends State<EventiScreen> {
     }
   }
 
-  Widget _buildEventCard(DocumentSnapshot event) {
-    return Card(
-      margin: EdgeInsets.symmetric(vertical: 8.0, horizontal: 16.0),
-      elevation: 8.0, // Increase the elevation for more shadow
-      color: Color.fromARGB(255, 224, 203, 255), // Very light tone of the same palette as #5E17EB
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  event['title'],
-                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-                ),
-                IconButton(
-                  icon: Icon(Icons.favorite_border),
-                  onPressed: () {
-                    // Handle save to favorites action
-                  },
-                ),
-              ],
-            ),
-            Text(
-              event['description'],
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-            SizedBox(height: 8.0),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    event['place'],
-                    style: TextStyle(fontSize: 16.0),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final url = Uri.parse(event['link']);
-                    print('Attempting to launch URL: $url');
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url);
-                    } else {
-                      print('Could not launch $url');
-                      throw 'Could not launch $url';
-                    }
-                  },
-                  child: Text(event['linkLabel']),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Eventi'),
-        actions: [
-          Padding(
-            padding: const EdgeInsets.all(5.0),
-            child: Container(
-              decoration: BoxDecoration(
-                color: Color(0xFF5E17EB),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: Icon(Icons.add, color: Colors.white),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => AddEventScreen()),
-                  );
-                },
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: _showCalendar ? _buildCalendarView() : _buildListView(),
-      bottomNavigationBar: BottomAppBar(
-        child: TextButton(
-          onPressed: () {
+  Widget _buildCalendarView() {
+    return Column(
+      children: [
+        TableCalendar(
+          firstDay: DateTime.utc(2000, 1, 1),
+          lastDay: DateTime.utc(2100, 12, 31),
+          focusedDay: _focusedDay,
+          calendarFormat: _calendarFormat,
+          selectedDayPredicate: (day) {
+            return isSameDay(_selectedDay, day);
+          },
+          onDaySelected: (selectedDay, focusedDay) {
             setState(() {
-              _showCalendar = !_showCalendar;
+              _selectedDay = selectedDay;
+              _focusedDay = focusedDay;
+              _selectedEvents = _events[selectedDay] ?? [];
             });
           },
-          child: Text(_showCalendar ? 'Visualizza Lista' : 'Visualizza Calendario'),
+          onFormatChanged: (format) {
+            if (_calendarFormat != format) {
+              setState(() {
+                _calendarFormat = format;
+              });
+            }
+          },
+          onPageChanged: (focusedDay) {
+            _focusedDay = focusedDay;
+          },
+          eventLoader: (day) => _events[day] ?? [],
+          calendarBuilders: CalendarBuilders(
+            markerBuilder: (context, date, events) {
+              if (events.isNotEmpty) {
+                return Positioned(
+                  right: 1,
+                  bottom: 1,
+                  child: _buildEventMarker(events.length),
+                );
+              }
+              return null;
+            },
+          ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildListView() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('events').orderBy('date').snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return Center(child: CircularProgressIndicator());
-        }
-
-        List<DocumentSnapshot> events = snapshot.data!.docs;
-        Map<String, List<DocumentSnapshot>> groupedEvents = {};
-
-        for (var event in events) {
-          String date = DateFormat('dd/MM/yyyy').format(event['date'].toDate());
-          if (groupedEvents[date] == null) {
-            groupedEvents[date] = [];
-          }
-          groupedEvents[date]!.add(event);
-        }
-
-        List<Widget> eventWidgets = [];
-        groupedEvents.forEach((date, events) {
-          eventWidgets.add(
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8.0),
-              child: Center(
-                child: Text(
-                  date,
-                  style: TextStyle(fontSize: 18.0, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
-          );
-          events.forEach((event) {
-            eventWidgets.add(_buildEventCard(event));
-          });
-        });
-
-        return ListView(
-          children: eventWidgets,
-        );
-      },
-    );
-  }
-
-  Widget _buildCalendarView() {
-    return TableCalendar(
-      firstDay: DateTime.utc(2000, 1, 1),
-      lastDay: DateTime.utc(2100, 12, 31),
-      focusedDay: _focusedDay,
-      calendarFormat: _calendarFormat,
-      selectedDayPredicate: (day) {
-        return isSameDay(_selectedDay, day);
-      },
-      onDaySelected: (selectedDay, focusedDay) {
-        setState(() {
-          _selectedDay = selectedDay;
-          _focusedDay = focusedDay; // update `_focusedDay` here as well
-        });
-      },
-      onFormatChanged: (format) {
-        if (_calendarFormat != format) {
-          setState(() {
-            _calendarFormat = format;
-          });
-        }
-      },
-      onPageChanged: (focusedDay) {
-        _focusedDay = focusedDay;
-      },
-      eventLoader: _getEventsForDay,
-      calendarBuilders: CalendarBuilders(
-        markerBuilder: (context, date, events) {
-          if (events.isNotEmpty) {
-            return Positioned(
-              right: 1,
-              bottom: 1,
-              child: _buildEventMarker(events.length),
-            );
-          }
-          return null;
-        },
-      ),
+        const SizedBox(height: 10), // Spacing
+        _buildEventList(), // List of events
+      ],
     );
   }
 
@@ -254,6 +293,166 @@ class _EventiScreenState extends State<EventiScreen> {
             color: Colors.white,
             fontSize: 12.0,
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEventList() {
+    return Expanded(
+      child: _selectedEvents.isEmpty
+          ? const Center(child: Text("Nessun evento in data scelta."))
+          : ListView.builder(
+              itemCount: _selectedEvents.length,
+              itemBuilder: (context, index) {
+                var event = _selectedEvents[index];
+                // Ensure that event.data() is not null before proceeding
+                Map<String, dynamic>? eventData = event.data() as Map<String, dynamic>?;
+
+                // If eventData is null, return an empty container or handle the error gracefully
+                if (eventData == null) {
+                  return Container(); // Or handle the null data case as needed
+                }
+
+                List<dynamic> favorites = eventData.containsKey('favorites') == true
+                    ? eventData['favorites']
+                    : [];
+                bool isFavorite = favorites.contains(userId); // Check if user already favorited
+
+                return Card(
+                  color: Color.fromARGB(255, 224, 203, 255),
+                  margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  child: ListTile(
+                    title: Text(eventData['title'] ?? 'Senza nome'),
+                    subtitle: Text(
+                      eventData['description'] ?? 'Senza descrizione',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    leading: const Icon(Icons.event, color: Color(0xFF5E17EB)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        eventData['link'] != null && eventData['linkLabel'] != null
+                            ? TextButton(
+                                style: TextButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                ),
+                                onPressed: () async {
+                                  final Uri url = Uri.parse(eventData['link']);
+                                  if (await canLaunchUrl(url)) {
+                                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                                  } else {
+                                    throw "Errore nell'apertura di ${eventData['link']}";
+                                  }
+                                },
+                                child: Text(
+                                  eventData['linkLabel'],
+                                  style: const TextStyle(color: Color(0xFF5E17EB)),
+                                ),
+                              )
+                            : Container(),
+                        IconButton(
+                          icon: Icon(
+                            isFavorite ? Icons.favorite : Icons.favorite_border,
+                            color: isFavorite ? Colors.red : Colors.grey,
+                          ),
+                          onPressed: () async {
+                            if (userId == null) return; // Ensure user is logged in
+
+                            List<dynamic> updatedFavorites = List.from(favorites);
+
+                            // Toggle favorite status
+                            if (isFavorite) {
+                              updatedFavorites.remove(userId); // Remove from favorites
+                            } else {
+                              updatedFavorites.add(userId); // Add to favorites
+                            }
+
+                            // Update Firestore (await here)
+                            await FirebaseFirestore.instance
+                                .collection('events')
+                                .doc(event.id)
+                                .update({'favorites': updatedFavorites});
+
+                            // Fetch the updated event **before** calling setState()
+                            var updatedEventSnapshot = await event.reference.get();
+
+                            // Update state synchronously
+                            setState(() {
+                              _selectedEvents[index] = updatedEventSnapshot;
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Eventi'),
+        actions: [
+          if (!_showCalendar) // Hide "Salvati" when in calendar mode
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _showFavorites ? Color(0xFF5E17EB) : Colors.white,
+                  foregroundColor: _showFavorites ? Colors.white : Color(0xFF5E17EB),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                ),
+                onPressed: () {
+                  setState(() {
+                    _showFavorites = !_showFavorites;
+                  });
+                },
+                child: Text('Salvati'),
+              ),
+            ),
+          Padding(
+            padding: const EdgeInsets.all(10.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Color(0xFF5E17EB),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(Icons.add, color: Colors.white, size: 22.0),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => AddEventScreen()),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: _showCalendar ? _buildCalendarView() : _buildListView(),
+      bottomNavigationBar: BottomAppBar(
+        color: Colors.transparent,
+        child: TextButton(
+          style: TextButton.styleFrom(
+            backgroundColor: Color(0xFF5E17EB),
+            foregroundColor: Colors.white,
+            textStyle: TextStyle(fontSize: 16.0, fontWeight: FontWeight.bold),
+          ),
+          onPressed: () {
+        setState(() {
+          _showCalendar = !_showCalendar;
+        });
+          },
+          child: Text(_showCalendar ? 'Visualizza Lista' : 'Visualizza Calendario'),
         ),
       ),
     );
