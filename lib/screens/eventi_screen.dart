@@ -234,6 +234,7 @@ class _EventiScreenState extends State<EventiScreen> {
     return Column(
       children: [
         TableCalendar(
+          key: ValueKey(_events.hashCode), // Forces widget update
           firstDay: DateTime.utc(2000, 1, 1),
           lastDay: DateTime.utc(2100, 12, 31),
           focusedDay: _focusedDay,
@@ -241,7 +242,8 @@ class _EventiScreenState extends State<EventiScreen> {
           selectedDayPredicate: (day) {
             return isSameDay(_selectedDay, day);
           },
-          onDaySelected: (selectedDay, focusedDay) {
+          onDaySelected: (selectedDay, focusedDay) async {
+            await Future.delayed(Duration(milliseconds: 50)); // Allow async update
             setState(() {
               _selectedDay = selectedDay;
               _focusedDay = focusedDay;
@@ -258,7 +260,7 @@ class _EventiScreenState extends State<EventiScreen> {
           onPageChanged: (focusedDay) {
             _focusedDay = focusedDay;
           },
-          eventLoader: (day) => _events[day] ?? [],
+          eventLoader: (day) => _events[day] != null ? _events[day]! : [],
           calendarBuilders: CalendarBuilders(
             markerBuilder: (context, date, events) {
               if (events.isNotEmpty) {
