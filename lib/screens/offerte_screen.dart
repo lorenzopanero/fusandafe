@@ -1,14 +1,160 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
-class OfferteScreen extends StatelessWidget {
+class OfferteScreen extends StatefulWidget {
+  @override
+  _OfferteScreenState createState() => _OfferteScreenState();
+}
+
+class _OfferteScreenState extends State<OfferteScreen> {
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final userId = FirebaseAuth.instance.currentUser?.uid; // Get the current user's ID
+
+  void _showOfferPopup(BuildContext context, QueryDocumentSnapshot offer) {
+    String uniqueCode = "${offer.id}_$userId";
+    
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text('QR Code'),
+          content: SizedBox(
+            width: 300, // Set an appropriate width
+            height: 300, // Set an appropriate height
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                QrImageView(
+                  data: uniqueCode,
+                  version: QrVersions.auto,
+                  size: 200.0,
+                ),
+                SelectableText("Codice: $uniqueCode"),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _validateOffer(BuildContext context) {
+    // TODO: Implement QR scanner and manual code input
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Offerte'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.add),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => AddOfferScreen()),
+              );
+            },
+          ),
+        ],
       ),
-      body: Center(
-        child: Text('Offerte Screen'),
+      body: StreamBuilder(
+        stream: _firestore.collection('offers').snapshots(),
+        builder: (context, AsyncSnapshot<QuerySnapshot> snapshot) {
+          if (!snapshot.hasData) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          var offers = snapshot.data!.docs;
+          return GridView.builder(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              childAspectRatio: 0.8,
+            ),
+            itemCount: offers.length,
+            itemBuilder: (context, index) {
+              var offer = offers[index];
+              return GestureDetector(
+                onTap: () => _showOfferPopup(context, offer),
+                child: Card(
+                  margin: EdgeInsets.all(10),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(offer['title'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      Text(offer['authorId']),
+                      if (offer['deadline'] != null) Text('Scade: ${offer['deadline']}'),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _validateOffer(context),
+        child: Icon(Icons.qr_code_scanner),
+      ),
+    );
+  }
+}
+
+class AddOfferScreen extends StatefulWidget {
+  @override
+  _AddOfferScreenState createState() => _AddOfferScreenState();
+}
+
+class _AddOfferScreenState extends State<AddOfferScreen> {
+  final _titleController = TextEditingController();
+  final _shopController = TextEditingController();
+  final _deadlineController = TextEditingController();
+  final _maxRedemptionsController = TextEditingController();
+
+  Future<void> _addOffer() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || _titleController.text.isEmpty || _shopController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Compila tutti i campi obbligatori.')));
+      return;
+    }
+
+    await FirebaseFirestore.instance.collection('offers').add({
+      'title': _titleController.text,
+      'shop': _shopController.text,
+      'authorId': user.uid,
+      'deadline': _deadlineController.text.isNotEmpty ? _deadlineController.text : null,
+      'maxRedemptions': _maxRedemptionsController.text.isNotEmpty ? int.tryParse(_maxRedemptionsController.text) : null,
+      'redemptions': [],
+    });
+
+    Navigator.pop(context);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Crea Offerta')),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            TextField(controller: _titleController, decoration: InputDecoration(labelText: 'Titolo')),
+            TextField(controller: _shopController, decoration: InputDecoration(labelText: 'Autore/Negozi')),
+            TextField(controller: _deadlineController, decoration: InputDecoration(labelText: 'Scadenza (opzionale)')),
+            TextField(controller: _maxRedemptionsController, decoration: InputDecoration(labelText: 'Max utilizzi (opzionale)')),
+            SizedBox(height: 20),
+            ElevatedButton(onPressed: _addOffer, child: Text('Salva Offerta')),
+          ],
+        ),
       ),
     );
   }
