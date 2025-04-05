@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
+import 'package:qr_code_scanner/qr_code_scanner.dart';
+import 'package:fluttertoast/fluttertoast.dart';
 
 class OfferteScreen extends StatefulWidget {
   @override
@@ -46,10 +48,6 @@ class _OfferteScreenState extends State<OfferteScreen> {
     );
   }
 
-  void _validateOffer(BuildContext context) {
-    // TODO: Implement QR scanner and manual code input
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -91,8 +89,8 @@ class _OfferteScreenState extends State<OfferteScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(offer['title'], style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                      Text(offer['authorId']),
-                      if (offer['deadline'] != null) Text('Scade: ${offer['deadline']}'),
+                      Text(offer['shop']),
+                      if (offer['deadline'] != null) Text('Scade il: ${offer['deadline']}'),
                     ],
                   ),
                 ),
@@ -102,7 +100,11 @@ class _OfferteScreenState extends State<OfferteScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _validateOffer(context),
+        onPressed: () {
+          Navigator.push(context, MaterialPageRoute(
+            builder: (context) => ValidateOfferScreen(),
+          ));
+        },
         child: Icon(Icons.qr_code_scanner),
       ),
     );
@@ -154,6 +156,134 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
             SizedBox(height: 20),
             ElevatedButton(onPressed: _addOffer, child: Text('Salva Offerta')),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class ValidateOfferScreen extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Valida Offerta')),
+      body: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          children: [
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => QRScannerScreen(),
+                  ),
+                );
+              },
+              icon: Icon(Icons.qr_code_scanner),
+              label: Text('Scansiona QR'),
+            ),
+            SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: () {
+                // Navigate to manual input
+              },
+              icon: Icon(Icons.keyboard),
+              label: Text('Inserisci Codice Manualmente'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class QRScannerScreen extends StatefulWidget {
+  @override
+  _QRScannerScreenState createState() => _QRScannerScreenState();
+}
+
+class _QRScannerScreenState extends State<QRScannerScreen> {
+  final GlobalKey qrKey = GlobalKey(debugLabel: 'QR');
+  QRViewController? controller;
+
+  @override
+  void dispose() {
+    controller?.dispose();
+    super.dispose();
+  }
+
+  void _onQRViewCreated(QRViewController controller) {
+    this.controller = controller;
+    controller.scannedDataStream.listen((scanData) async {
+      final data = scanData.code ?? '';
+      if (!data.contains('_')) return;
+
+      final parts = data.split('_');
+      final offerId = parts[0];
+      final userId = parts[1];
+
+      await validateOffer(offerId, userId);
+      controller.pauseCamera();
+      Navigator.pop(context);
+    });
+  }
+
+  Future<void> validateOffer(String offerId, String userId) async {
+    final offerRef = FirebaseFirestore.instance.collection('offers').doc(offerId);
+    final offerSnap = await offerRef.get();
+
+    if (!offerSnap.exists) {
+      _showToast('Offerta non trovata');
+      return;
+    }
+
+    final offerData = offerSnap.data()!;
+    final redeemedBy = offerData['redeemedBy'] ?? {};
+    final max = offerData['maxRedemptions'];
+    final current = offerData['redeemedCount'] ?? 0;
+
+    if (redeemedBy.containsKey(userId)) {
+      _showToast('Offerta già usata da questo utente.');
+      return;
+    }
+
+    if (max != null && current >= max) {
+      _showToast('Offerta esaurita.');
+      return;
+    }
+
+    await offerRef.update({
+      'redeemedBy.$userId': true,
+      'redeemedCount': FieldValue.increment(1),
+    });
+
+    _showToast('Offerta validata con successo!');
+  }
+
+  void _showToast(String message) {
+    Fluttertoast.showToast(
+      msg: message,
+      toastLength: Toast.LENGTH_SHORT,
+      gravity: ToastGravity.BOTTOM,
+      backgroundColor: Colors.black87,
+      textColor: Colors.white,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text('Scansiona QR')),
+      body: QRView(
+        key: qrKey,
+        onQRViewCreated: _onQRViewCreated,
+        overlay: QrScannerOverlayShape(
+          borderColor: Colors.deepPurple,
+          borderRadius: 10,
+          borderLength: 30,
+          borderWidth: 10,
+          cutOutSize: 300,
         ),
       ),
     );
