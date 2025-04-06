@@ -15,3 +15,7 @@
 
 # Keep Parcelable classes
 -keepclassmembers class * implements android.os.Parcelable { *; }
+
+# Keep Google Play Core classes
+-keep class com.google.android.play.** { *; }
+-dontwarn com.google.android.play.**

@@ -12,10 +12,17 @@ class OfferteScreen extends StatefulWidget {
 class _OfferteScreenState extends State<OfferteScreen> {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final userId = FirebaseAuth.instance.currentUser?.uid; // Get the current user's ID
+  bool _showValidationButtons = false; // State to toggle the validation buttons
+
+  void _toggleValidationButtons() {
+    setState(() {
+      _showValidationButtons = !_showValidationButtons;
+    });
+  }
 
   void _showOfferPopup(BuildContext context, QueryDocumentSnapshot offer) {
     String uniqueCode = "${offer.id}_$userId";
-    
+
     showDialog(
       context: context,
       builder: (context) {
@@ -98,13 +105,42 @@ class _OfferteScreenState extends State<OfferteScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(context, MaterialPageRoute(
-            builder: (context) => ValidateOfferScreen(),
-          ));
-        },
-        child: Icon(Icons.qr_code_scanner),
+      floatingActionButton: Stack(
+        alignment: Alignment.bottomRight,
+        children: [
+          // Main Floating Action Button
+          FloatingActionButton(
+            onPressed: _toggleValidationButtons,
+            child: Icon(_showValidationButtons ? Icons.close : Icons.qr_code_scanner),
+          ),
+          // "Scansiona QR" Button
+          if (_showValidationButtons)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 80.0),
+              child: FloatingActionButton.extended(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => QRScannerScreen()),
+                  );
+                },
+                icon: Icon(Icons.qr_code_scanner),
+                label: Text('Scansiona QR'),
+              ),
+            ),
+          // "Inserisci Manualmente" Button
+          if (_showValidationButtons)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 150.0),
+              child: FloatingActionButton.extended(
+                onPressed: () {
+                  // Navigate to manual input screen
+                },
+                icon: Icon(Icons.keyboard),
+                label: Text('Inserisci Manualmente'),
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -161,42 +197,6 @@ class _AddOfferScreenState extends State<AddOfferScreen> {
   }
 }
 
-class ValidateOfferScreen extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Valida Offerta')),
-      body: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => QRScannerScreen(),
-                  ),
-                );
-              },
-              icon: Icon(Icons.qr_code_scanner),
-              label: Text('Scansiona QR'),
-            ),
-            SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: () {
-                // Navigate to manual input
-              },
-              icon: Icon(Icons.keyboard),
-              label: Text('Inserisci Codice Manualmente'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class QRScannerScreen extends StatefulWidget {
   @override
   _QRScannerScreenState createState() => _QRScannerScreenState();
@@ -233,39 +233,47 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final offerSnap = await offerRef.get();
 
     if (!offerSnap.exists) {
-      _showSnackbar(context, 'Offerta non trovata');
+      _showSnackbar(context, 'Offerta non trovata', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
     final offerData = offerSnap.data()!;
-    final redeemedBy = offerData['redeemedBy'] ?? {};
+    final authorId = offerData['authorId']; // Get the author ID from the offer document
+    final redeemedBy = offerData['redemptions'] ?? {};
     final max = offerData['maxRedemptions'];
     final current = offerData['redeemedCount'] ?? 0;
 
+    // Check if the current user is the author of the offer
+    final currentUserId = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUserId != authorId) {
+      _showSnackbar(context, 'Solo l\'autore dell\'offerta può validarla.', const Color.fromARGB(255, 146, 34, 26));
+      return;
+    }
+
     if (redeemedBy.containsKey(userId)) {
-      _showSnackbar(context, 'Offerta già usata da questo utente.');
+      _showSnackbar(context, 'Offerta già usata da questo utente.', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
     if (max != null && current >= max) {
-      _showSnackbar(context, 'Offerta esaurita.');
+      _showSnackbar(context, 'Offerta esaurita.', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
     await offerRef.update({
-      'redeemedBy.$userId': true,
+      'redemptions.$userId': true,
       'redeemedCount': FieldValue.increment(1),
     });
 
-    _showSnackbar(context, 'Offerta validata con successo!');
+    _showSnackbar(context, 'Offerta validata con successo!', const Color.fromARGB(255, 24, 85, 26));
   }
 
-  void _showSnackbar(BuildContext context, String message) {
+  void _showSnackbar(BuildContext context, String message, Color backgroundColor) {
     final snackBar = SnackBar(
       content: Text(message),
-      backgroundColor: Colors.black87,
+      backgroundColor: backgroundColor,
       behavior: SnackBarBehavior.floating,
-      duration: Duration(seconds: 2), // Equivalent to Toast.LENGTH_SHORT
+      duration: Duration(seconds: 3),
     );
 
     ScaffoldMessenger.of(context).showSnackBar(snackBar);
