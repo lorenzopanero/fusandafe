@@ -3,7 +3,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:qr_code_scanner/qr_code_scanner.dart';
-import 'package:fluttertoast/fluttertoast.dart';
 
 class OfferteScreen extends StatefulWidget {
   @override
@@ -234,7 +233,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final offerSnap = await offerRef.get();
 
     if (!offerSnap.exists) {
-      _showToast('Offerta non trovata');
+      _showSnackbar(context, 'Offerta non trovata');
       return;
     }
 
@@ -244,12 +243,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final current = offerData['redeemedCount'] ?? 0;
 
     if (redeemedBy.containsKey(userId)) {
-      _showToast('Offerta già usata da questo utente.');
+      _showSnackbar(context, 'Offerta già usata da questo utente.');
       return;
     }
 
     if (max != null && current >= max) {
-      _showToast('Offerta esaurita.');
+      _showSnackbar(context, 'Offerta esaurita.');
       return;
     }
 
@@ -258,17 +257,18 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       'redeemedCount': FieldValue.increment(1),
     });
 
-    _showToast('Offerta validata con successo!');
+    _showSnackbar(context, 'Offerta validata con successo!');
   }
 
-  void _showToast(String message) {
-    Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_SHORT,
-      gravity: ToastGravity.BOTTOM,
+  void _showSnackbar(BuildContext context, String message) {
+    final snackBar = SnackBar(
+      content: Text(message),
       backgroundColor: Colors.black87,
-      textColor: Colors.white,
+      behavior: SnackBarBehavior.floating,
+      duration: Duration(seconds: 2), // Equivalent to Toast.LENGTH_SHORT
     );
+
+    ScaffoldMessenger.of(context).showSnackBar(snackBar);
   }
 
   @override
