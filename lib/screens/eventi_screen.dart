@@ -419,7 +419,7 @@ class _EventiScreenState extends State<EventiScreen> {
                     _showFavorites = !_showFavorites;
                   });
                 },
-                child: Text('Salvati'),
+                child: Text('Preferiti'),
               ),
             ),
           Padding(

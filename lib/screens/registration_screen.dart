@@ -230,7 +230,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   _isLoading
                       ? CircularProgressIndicator()
                       : ElevatedButton(
-                          onPressed: _register,
+                          onPressed: () {
+                            if (_passwordStrength < 0.75) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Password troppo debole')),
+                              );
+                            } else {
+                              _register();
+                            }
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: const Color(0xFF5E17EB), // Background color
                             foregroundColor: Colors.white, // Text color
