@@ -233,7 +233,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final offerSnap = await offerRef.get();
 
     if (!offerSnap.exists) {
-      _showToast('Offerta non trovata');
+      _showSnackbar(context, 'Offerta non trovata', Colors.red);
       return;
     }
 
@@ -251,12 +251,12 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     }
 
     if (redeemedBy.containsKey(userId)) {
-      _showToast('Offerta già usata da questo utente.');
+      _showSnackbar(context, 'Offerta già usata da questo utente.', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
     if (max != null && current >= max) {
-      _showToast('Offerta esaurita.');
+      _showSnackbar(context, 'Offerta esaurita.', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
@@ -265,16 +265,16 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
       'redeemedCount': FieldValue.increment(1),
     });
 
-    _showToast('Offerta validata con successo!');
+    _showSnackbar(context, 'Offerta validata con successo!', const Color.fromARGB(255, 32, 83, 33));
   }
 
-  void _showToast(String message) {
-    Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_SHORT,
-      gravity: ToastGravity.BOTTOM,
-      backgroundColor: Colors.black87,
-      textColor: Colors.white,
+  void _showSnackbar(BuildContext context, String message, Color backgroundColor) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: backgroundColor,
+        behavior: SnackBarBehavior.floating,
+      ),
     );
   }
 
