@@ -233,7 +233,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     final offerSnap = await offerRef.get();
 
     if (!offerSnap.exists) {
-      _showSnackbar(context, 'Offerta non trovata', Colors.red);
+      _showSnackbar(context, 'Offerta non trovata', const Color.fromARGB(255, 146, 34, 26));
       return;
     }
 
@@ -261,7 +261,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     }
 
     await offerRef.update({
-      'redemptions.$userId': true,
+      'redemptions': FieldValue.arrayUnion([userId]),
       'redeemedCount': FieldValue.increment(1),
     });
 
