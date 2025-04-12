@@ -46,7 +46,8 @@ class _EventiScreenState extends State<EventiScreen> {
 
         for (var event in snapshot.docs) {
           DateTime fullDate = event['date'].toDate();
-          DateTime date = DateTime(fullDate.year, fullDate.month, fullDate.day); // Normalize
+          // Normalize to UTC to avoid time zone issues
+          DateTime date = DateTime.utc(fullDate.year, fullDate.month, fullDate.day);
 
           if (_events[date] == null) {
             _events[date] = [];
@@ -245,9 +246,10 @@ class _EventiScreenState extends State<EventiScreen> {
           onDaySelected: (selectedDay, focusedDay) async {
             await Future.delayed(Duration(milliseconds: 50)); // Allow async update
             setState(() {
-              _selectedDay = selectedDay;
-              _focusedDay = focusedDay;
-              _selectedEvents = _events[selectedDay] ?? [];
+              // Normalize selectedDay to UTC
+              _selectedDay = DateTime.utc(selectedDay.year, selectedDay.month, selectedDay.day);
+              _focusedDay = DateTime.utc(focusedDay.year, focusedDay.month, focusedDay.day);
+              _selectedEvents = _events[_selectedDay] ?? [];
             });
           },
           onFormatChanged: (format) {

@@ -34,14 +34,28 @@ android {
         versionName = flutter.versionName
     }
 
+    // Enables support for the Android App Bundle.
+    def keystoreProperties = new Properties()
+    def keystorePropertiesFile = rootProject.file("key.properties")
+    if (keystorePropertiesFile.exists()) {
+        keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+    }
+
+    signingConfigs {
+        release {
+            keyAlias keystoreProperties['keyAlias']
+            keyPassword keystoreProperties['keyPassword']
+            storeFile file(keystoreProperties['storeFile'])
+            storePassword keystoreProperties['storePassword']
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled true  // Enables code shrinking & obfuscation
             shrinkResources true  // Removes unused resources
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-
-            // TODO: Replace this with your actual release signing config
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
         }
     }
 }
