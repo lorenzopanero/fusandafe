@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'fantapalio_screen.dart';
+import 'fp_dashboard.dart';
 import 'eventi_screen.dart';
 import 'idee_screen.dart';
 import 'offerte_screen.dart';
@@ -121,7 +121,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   crossAxisSpacing: 16.0,
                   mainAxisSpacing: 16.0,
                   children: [
-                    _buildCard('FantaPalio', Icons.sports_soccer, FantaPalioScreen()),
+                    _buildCard('FantaPalio', Icons.sports_soccer, FantapalioDashboardScreen()),
                     _buildCard('Eventi', Icons.event, EventiScreen()),
                     _buildCard('Idee', Icons.lightbulb, IdeeScreen()),
                     _buildCard('Offerte', Icons.local_offer, OfferteScreen()),
