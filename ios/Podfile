@@ -17,8 +17,6 @@ def flutter_install_all_ios_pods(flutter_application_path)
   eval(File.read(File.join(flutter_application_path, '.flutter-plugins-dependencies')), binding)
 end
 
-require File.expand_path(File.join('packages', 'flutter_tools', 'bin', 'podhelper'), __dir__)
-
 target 'Runner' do
   use_frameworks!
   use_modular_headers!
