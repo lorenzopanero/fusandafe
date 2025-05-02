@@ -274,6 +274,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     });
 
     _showSnackbar(context, 'Offerta validata con successo!', const Color.fromARGB(255, 32, 83, 33));
+    return;
   }
 
   void _showSnackbar(BuildContext context, String message, Color backgroundColor) {
@@ -357,6 +358,7 @@ class _ManualInputScreenState extends State<ManualInputScreen> {
     });
 
     _showSnackbar(context, 'Offerta validata con successo!', const Color.fromARGB(255, 32, 83, 33));
+    return;
   }
 
   void _showSnackbar(BuildContext context, String message, Color backgroundColor) {
