@@ -1,25 +1,15 @@
-# ios/Podfile
-
-# Uncomment this line to define a global platform for your project
-platform :ios, '13.0'
-
-# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
-ENV['COCOAPODS_DISABLE_STATS'] = 'true'
-
-project 'Runner', {
-  'Debug' => :debug,
-  'Profile' => :release,
-  'Release' => :release,
-}
-
-def flutter_install_all_ios_pods(flutter_application_path)
-  # This method is defined by Flutter tools
-  eval(File.read(File.join(flutter_application_path, '.flutter-plugins-dependencies')), binding)
-end
+# Uncomment the next line to define a global platform for your project
+# platform :ios, '9.0'
 
 target 'Runner' do
+  # Comment the next line if you don't want to use dynamic frameworks
   use_frameworks!
-  use_modular_headers!
 
-  flutter_install_all_ios_pods(File.dirname(File.realpath(__FILE__)))
+  # Pods for Runner
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+    # Pods for testing
+  end
+
 end
