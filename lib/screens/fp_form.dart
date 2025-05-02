@@ -95,21 +95,21 @@ class _FantapalioFormScreenState extends State<FantapalioFormScreen> {
       final data = doc.data()!;
       final answers = data['answers'] as List<dynamic>;
 
-      setState(() {
-        // Map answers to the correct indices in _formValues
-        for (var answer in answers) {
-          final questionIndex = _questions.indexWhere(
-            (q) => q['question'] == answer['question'],
-          );
-          if (questionIndex != -1) {
-            _formValues[questionIndex] = answer['answer'];
-          }
+      for (var answer in answers) {
+        final questionIndex = _questions.indexWhere(
+          (q) => q['question'] == answer['question'],
+        );
+        if (questionIndex != -1) {
+          _formValues[questionIndex] = answer['answer'];
         }
+      }
+
+      setState(() {
         _originalFormValues = Map.from(_formValues); // Save original values
       });
     }
   }
-
+  
   Future<void> _saveAnswers() async {
     setState(() {
       _isSubmitting = true;
@@ -187,16 +187,21 @@ class _FantapalioFormScreenState extends State<FantapalioFormScreen> {
     final question = _questions[index];
     final type = question['type'];
 
+    // Dynamically fetch the answer for the current step
+    final initialValue = _formValues[index] ?? '';
+
     switch (type) {
       case 'text':
+        final controller = TextEditingController(text: initialValue);
         return TextFormField(
-          initialValue: _formValues[index] ?? '', // Prefill with saved answer
+          controller: controller, // Use controller instead of initialValue
           onChanged: (val) => _formValues[index] = val,
           decoration: InputDecoration(labelText: question['question']),
         );
       case 'number':
+        final controller = TextEditingController(text: initialValue.toString());
         return TextFormField(
-          initialValue: _formValues[index]?.toString() ?? '', // Prefill with saved answer
+          controller: controller, // Use controller instead of initialValue
           onChanged: (val) => _formValues[index] = int.tryParse(val),
           keyboardType: TextInputType.number,
           decoration: InputDecoration(labelText: question['question']),
@@ -208,7 +213,7 @@ class _FantapalioFormScreenState extends State<FantapalioFormScreen> {
               .map((opt) => RadioListTile(
                     title: Text(opt),
                     value: opt,
-                    groupValue: _formValues[index], // Prefill with saved answer
+                    groupValue: _formValues[index], // Prefill only for the current step
                     onChanged: (val) => setState(() {
                       _formValues[index] = val;
                     }),
@@ -219,7 +224,7 @@ class _FantapalioFormScreenState extends State<FantapalioFormScreen> {
         return const SizedBox.shrink();
     }
   }
-  
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -246,7 +251,7 @@ class _FantapalioFormScreenState extends State<FantapalioFormScreen> {
                 _questions.length,
                 (index) => Step(
                   title: Text(_questions[index]['question']),
-                  content: _buildStepContent(index),
+                  content: _buildStepContent(index), // Dynamically load content
                   isActive: index == _currentStep,
                   state: _formValues[index] != null && _formValues[index] != ''
                       ? StepState.complete

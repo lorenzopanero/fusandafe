@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'fp_form.dart';
 import 'fp_bonus.dart';
 import 'fp_results.dart';
+import 'fp_premi.dart';
 
 class FantapalioDashboardScreen extends StatefulWidget {
   const FantapalioDashboardScreen({super.key});
@@ -256,7 +257,7 @@ class _FantapalioDashboardScreenState extends State<FantapalioDashboardScreen> {
                 children: [
                   DashboardButton(
                     icon: Icons.edit_document,
-                    label: 'Compila / Rivedi il tuo FantaModulo',
+                    label: 'Compila / Rivedi il FantaModulo',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -270,7 +271,7 @@ class _FantapalioDashboardScreenState extends State<FantapalioDashboardScreen> {
                   const SizedBox(height: 16),
                   DashboardButton(
                     icon: Icons.card_giftcard,
-                    label: 'Punti Bonus & Spiegazioni',
+                    label: 'Guadagna punti Bonus',
                     onTap: () {
                       Navigator.of(context).push(
                         MaterialPageRoute(
@@ -292,6 +293,20 @@ class _FantapalioDashboardScreenState extends State<FantapalioDashboardScreen> {
                             totalScore: 0, // Replace with the actual total score
                             placement: 0,  // Replace with the actual placement
                           ),
+                        ),
+                      );
+                    },
+                    buttonColor: buttonColor,
+                    buttonTextColor: buttonTextColor,
+                  ),
+                  const SizedBox(height: 16),
+                  DashboardButton(
+                    icon: Icons.wallet_giftcard,
+                    label: 'Premi in palio',
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const SponsorPremiScreen(),
                         ),
                       );
                     },
