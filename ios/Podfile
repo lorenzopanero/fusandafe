@@ -4,7 +4,7 @@ platform :ios, '13.0'
 # Add this for Flutter plugin support
 flutter_application_path = '../'
 
-load File.join(flutter_application_path, 'ios', 'Flutter')
+load File.join('<FluterSDKPath>/packages', 'flutter_tools', 'bin', 'podhelper.rb')
 
 target 'Runner' do
   use_frameworks!
