@@ -1,0 +1,30 @@
+# Uncomment the next line to define a global platform for your project
+platform :ios, '13.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
+
+# Add this for Flutter plugin support
+flutter_application_path = '../'
+
+load File.join(flutter_application_path, 'ios', 'Flutter', 'podhelper.rb')
+
+target 'Runner' do
+  use_frameworks!
+  use_modular_headers!
+
+  # Dynamically include all plugins with explicit paths
+  plugins_dir = File.join('.symlinks', 'plugins')
+  Dir.glob(File.join(plugins_dir, '*', '*', 'ios')).each do |plugin_ios_path|
+    plugin_name = File.basename(File.dirname(File.dirname(plugin_ios_path)))
+    pod plugin_name, :path => plugin_ios_path
+  end
+
+  # Install all Flutter plugins
+  install_all_flutter_pods(flutter_application_path)
+
+  target 'RunnerTests' do
+    inherit! :search_paths
+    # Pods for testing
+  end
+end
