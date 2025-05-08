@@ -1,5 +1,10 @@
+source 'https://cdn.cocoapods.org/'
+
 # Uncomment the next line to define a global platform for your project
 platform :ios, '13.0'
+
+# CocoaPods analytics sends network stats synchronously affecting flutter build latency.
+ENV['COCOAPODS_DISABLE_STATS'] = 'true'
 
 # Add this for Flutter plugin support
 flutter_application_path = '../'
@@ -10,10 +15,26 @@ target 'Runner' do
   use_frameworks!
   use_modular_headers!
 
-  install_all_flutter_pods(flutter_application_path)
+  # Explicitly specify the path to each plugin
+  pod 'cloud_firestore', :path => '.symlinks/plugins/cloud_firestore/cloud_firestore-5.6.6/ios'
+  pod 'cloud_firestore_web', :path => '.symlinks/plugins/cloud_firestore_web/cloud_firestore_web-4.4.6/ios'
+  pod 'firebase_app_check', :path => '.symlinks/plugins/firebase_app_check/firebase_app_check-0.3.1+4/ios'
+  pod 'firebase_auth', :path => '.symlinks/plugins/firebase_auth/firebase_auth-5.5.2/ios'
+  pod 'firebase_core', :path => '.symlinks/plugins/firebase_core/firebase_core-3.13.0/ios'
+  pod 'firebase_storage', :path => '.symlinks/plugins/firebase_storage/firebase_storage-12.3.4/ios'
+  pod 'firebase_storage_web', :path => '.symlinks/plugins/firebase_storage_web/firebase_storage_web-3.10.12/ios'
+  pod 'image_picker_ios', :path => '.symlinks/plugins/image_picker_ios/image_picker_ios-0.8.12+2/ios'
+  pod 'qr_code_scanner', :path => '.symlinks/plugins/qr_code_scanner/qr_code_scanner-1.0.1/ios'
+  pod 'url_launcher_ios', :path => '.symlinks/plugins/url_launcher_ios/url_launcher_ios-6.3.3/ios'
 
   target 'RunnerTests' do
     inherit! :search_paths
     # Pods for testing
+  end
+end
+
+post_install do |installer|
+  installer.pods_project.targets.each do |target|
+    flutter_additional_ios_build_settings(target)
   end
 end
